@@ -6,68 +6,157 @@ import Glibc
 let server = "localhost"
 let port: Int32 = 7667
 
+enum clientError: Error {
+    case optionError
+    case valueError
+}
+
 func printMenu() {
-    print("1. Int")
+    print("\n1. Int")
     print("2. String")
     print("3. Exit\n")
     print("Choose and Option")
 }
 
-func Option() -> Int {
+func menuOption() -> Int {
     printMenu()
-    let x = readLine()
-
-    if x == "1" {
+    let option = readLine()
+    if option == "1" {
         return 1
-    }else if x == "2" {
+    }else if option == "2" {
         return 2
-    }else if x == "3"{
+    }else if option == "3"{
         return 3
     }else{
         return 0
     }
 }
 
-func sendMessage(_ option: Int) -> Data {
-    let message1 = "hola"
-    let message2 = "12"
-    var buffer = Data(capacity: 1000) 
-    if option == 2 {
-        message1.utf8CString.withUnsafeBytes { buffer.append(contentsOf: $0) }
-        return buffer
-    }else if option == 1 {
-        let message = Int(message2)
-        withUnsafeBytes(of: message) { buffer.append(contentsOf: $0) }
-        return buffer
+func toBuffer(_ option: Int,_ mess: String,_ buffer: Data) -> Data {
+    var auxBuffer = buffer
+    if option == 1 {
+        do{
+            if let num = Int(mess) {
+                withUnsafeBytes(of: num) { auxBuffer.append(contentsOf: $0) }
+            }else{
+                throw clientError.valueError
+            }
+        }catch let error {
+            print("\n\(error): Wrong type of data")
+            exit(1)
+        }
+        return auxBuffer
     }else{
-        return buffer
+        mess.utf8CString.withUnsafeBytes { auxBuffer.append(contentsOf: $0) }
+        return auxBuffer
     }
-
 }
 
 
-var option = Option()
-var buffer = sendMessage(option)
-print(buffer)
+do {
+    var quit = false
+    repeat{
+        let option = menuOption()
+        if option == 0 {
+            throw clientError.optionError
+        }else if option == 3 {
+            quit = true
+        }else{
+            do {
+                guard let serverAddress = Socket.createAddress(for: server, on: port) else {
+                    print("Error creating Address")
+                    exit(1)
+                }
+                let clientSocket = try Socket.create(family: .inet, type: .datagram, proto: .udp)
+                var buffer = Data(capacity: 1000) 
+                let mess = readLine()!
+                var dataType: String
+                if option == 1 {
+                    dataType = "int"
+                    dataType.utf8CString.withUnsafeBytes {buffer.append(contentsOf: $0) }
+                    try clientSocket.write(from: buffer, to: serverAddress)
+                    buffer.removeAll()
+                    buffer = toBuffer(option, mess, buffer)
+                    try clientSocket.write(from: buffer, to: serverAddress)
 
+                }else{
+                    dataType = "string"
+                    dataType.utf8CString.withUnsafeBytes {buffer.append(contentsOf: $0) }
+                    try clientSocket.write(from: buffer, to: serverAddress)
+                    buffer.removeAll()
+                    buffer = toBuffer(option, mess, buffer)
+                    try clientSocket.write(from: buffer, to: serverAddress)
+                }
+                buffer.removeAll()
+                
+                (_, _) = try clientSocket.readDatagram(into: &buffer) //coge los datos recibidos
+                let message = String(decoding: buffer, as: UTF8.self)
+                print(message)
+                buffer.removeAll()
 
+            }catch let error{
+                print("Connection error: \(error)")
+            }
+        }       
 
+    }while !quit
 
-
+}catch let error{
+    print("\n\(error): Options allowed (1, 2 or 3)")
+}
 
 
 // do {
-//     guard let serverAddress = Socket.createAddress(for: server, on: port) else {
-//     print("Error creating Address")
-//     exit(1)
-// }
+//     repeat{
+//         let option = menuOption()
+//         if option == 0 {
+//             throw clientError.optionError
+//         }
 
-//     let clientSocket = try Socket.create(family: .inet, type: .datagram, proto: .udp)
-//     var buffer = Data(capacity: 1000)
-//     "hello".utf8CString.withUnsafeBytes { buffer.append(contentsOf: $0) }
-//     withUnsafeBytes(of: 42) { buffer.append(contentsOf: $0) }
-//     withUnsafeBytes(of: Point(x: 0.7, y: -1.25)) { buffer.append(contentsOf: $0) }
-//     try clientSocket.write(from: buffer, to: serverAddress)
-// } catch let error {
-//     print("Connection error: \(error)")
+//     }while option != 3
+    
+//     let option = menuOption()
+//     if option == 3 {
+//         exit(1)
+//     }else if option == 0  {
+//         throw clientError.optionError
+//     }
+//     do {
+//         guard let serverAddress = Socket.createAddress(for: server, on: port) else {
+//             print("Error creating Address")
+//             exit(1)
+//         }
+//         let clientSocket = try Socket.create(family: .inet, type: .datagram, proto: .udp)
+//         var buffer = Data(capacity: 1000) 
+//         let mess = readLine()!
+//         var dataType: String
+//         if option == 1{
+//             dataType = "int"
+//             dataType.utf8CString.withUnsafeBytes {buffer.append(contentsOf: $0) }
+//             try clientSocket.write(from: buffer, to: serverAddress)
+//             buffer.removeAll()
+//             buffer = toBuffer(option, mess, buffer)
+//             try clientSocket.write(from: buffer, to: serverAddress)
+
+//         }else{
+//             dataType = "string"
+//             dataType.utf8CString.withUnsafeBytes {buffer.append(contentsOf: $0) }
+//             try clientSocket.write(from: buffer, to: serverAddress)
+//             buffer.removeAll()
+//             buffer = toBuffer(option, mess, buffer)
+//             try clientSocket.write(from: buffer, to: serverAddress)
+//         }
+//         buffer.removeAll()
+        
+//         (_, _) = try clientSocket.readDatagram(into: &buffer) //coge los datos recibidos
+//         let message = String(decoding: buffer, as: UTF8.self)
+//         print(message)
+//         buffer.removeAll()
+
+//     }catch let error{
+//         print("Connection error: \(error)")
+//     }
+
+// }catch let error{
+//     print("\n\(error): Options allowed (1, 2 or 3)")
 // }
